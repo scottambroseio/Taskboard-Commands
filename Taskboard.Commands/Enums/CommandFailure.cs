@@ -1,6 +1,7 @@
 ﻿namespace Taskboard.Commands.Enums
 {
-    public enum OperationFailure
+    public enum CommandFailure
     {
+        Error = 1
     }
 }

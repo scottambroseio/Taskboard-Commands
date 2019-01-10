@@ -7,11 +7,11 @@ namespace Taskboard.Commands.Handlers
 {
     public interface ICommandHander<TCommand> where TCommand : ICommand
     {
-        Task<Option<OperationFailure>> Execute(TCommand command);
+        Task<Option<CommandFailure>> Execute(TCommand command);
     }
 
     public interface ICommandHander<TCommand, TResult> where TCommand : ICommand
     {
-        Task<Option<TResult, OperationFailure>> Execute(TCommand command);
+        Task<Option<TResult, CommandFailure>> Execute(TCommand command);
     }
 }

@@ -1,8 +1,6 @@
+using System;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Internal;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Optional;
@@ -21,23 +19,22 @@ namespace Taskboard.Commands.Tests.Api
         [TestMethod]
         public async Task ValidRequest_ReturnsCorrectResponse()
         {
-            var handler = new Mock<ICommandHander<CreateListCommand, string>>();
+            var handler = new Mock<ICommandHander<CreateListCommand, Uri>>();
             var container = new Container();
-            var logger = new Mock<ILogger>().Object;
             var list = new ListDTO {Name = "list"};
-            var request = new DefaultHttpRequest(new DefaultHttpContext());
+            var location = new Uri("https://www.test.co.uk");
 
             handler.Setup(h => h.Execute(It.IsAny<CreateListCommand>()))
-                .ReturnsAsync(Option.Some<string, OperationFailure>("location"));
+                .ReturnsAsync(Option.Some<Uri, CommandFailure>(location));
             container.RegisterInstance(handler.Object);
             CreateList.Container = container;
 
-            var result = await CreateList.Run(request, list, logger) as CreatedResult;
+            var result = await CreateList.Run(list) as CreatedResult;
 
             Assert.IsNotNull(result);
 
             Assert.IsNull(result.Value);
-            Assert.AreEqual("location", result.Location);
+            Assert.AreEqual(location, result.Location);
         }
     }
 }
