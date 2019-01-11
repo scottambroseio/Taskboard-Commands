@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Threading.Tasks;
 using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Documents;
@@ -53,6 +54,53 @@ namespace Taskboard.Commands.Repositories
                 await documentClient.DeleteDocumentAsync(uri, new RequestOptions
                 {
                     PartitionKey = new PartitionKey(id)
+                });
+
+                return Option.None<CosmosFailure>();
+            }
+            catch (DocumentClientException ex)
+            {
+                telemetryClient.TrackException(ex);
+
+                return Option.Some(CosmosFailure.Error);
+            }
+        }
+
+        public async Task<Option<List, CosmosFailure>> GetById(string id)
+        {
+            try
+            {
+                var uri = UriFactory.CreateDocumentUri(db, collection, id);
+
+                var document = await documentClient.ReadDocumentAsync<List>(uri, new RequestOptions
+                {
+                    PartitionKey = new PartitionKey(id)
+                });
+
+                return Option.Some<List, CosmosFailure>(document);
+            }
+            catch (DocumentClientException ex)
+            {
+                if (ex.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return Option.None<List, CosmosFailure>(CosmosFailure.NotFound);
+                }
+
+                telemetryClient.TrackException(ex);
+
+                return Option.None<List, CosmosFailure>(CosmosFailure.Error);
+            }
+        }
+
+        public async Task<Option<CosmosFailure>> Replace(List list)
+        {
+            try
+            {
+                var uri = UriFactory.CreateDocumentUri(db, collection, list.Id);
+
+                await documentClient.ReplaceDocumentAsync(uri, list, new RequestOptions
+                {
+                    PartitionKey = new PartitionKey(list.Id)
                 });
 
                 return Option.None<CosmosFailure>();

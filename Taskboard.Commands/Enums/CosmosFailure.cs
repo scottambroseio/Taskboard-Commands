@@ -2,6 +2,7 @@
 {
     public enum CosmosFailure
     {
-        Error = 1
+        Error = 1,
+        NotFound = 2
     }
 }

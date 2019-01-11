@@ -1,7 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Internal;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -9,28 +7,29 @@ using Optional;
 using SimpleInjector;
 using Taskboard.Commands.Api;
 using Taskboard.Commands.Commands;
+using Taskboard.Commands.DTO;
 using Taskboard.Commands.Enums;
 using Taskboard.Commands.Handlers;
 
 namespace Taskboard.Commands.Tests.Api
 {
     [TestClass]
-    public class DeleteListTests
+    public class CreateTaskTests
     {
         [TestMethod]
         public async Task ValidRequest_ReturnsCorrectResponse()
         {
-            var handler = new Mock<ICommandHander<DeleteListCommand>>();
+            var handler = new Mock<ICommandHander<CreateTaskCommand>>();
             var container = new Container();
-            var id = Guid.NewGuid().ToString();
-            var request = new DefaultHttpRequest(new DefaultHttpContext());
+            var listId = Guid.NewGuid().ToString();
+            var task = new TaskDTO {Name = "task", Description = "description"};
 
-            handler.Setup(h => h.Execute(It.IsAny<DeleteListCommand>()))
+            handler.Setup(h => h.Execute(It.IsAny<CreateTaskCommand>()))
                 .ReturnsAsync(Option.None<CommandFailure>());
             container.RegisterInstance(handler.Object);
-            DeleteList.Container = container;
+            CreateTask.Container = container;
 
-            var result = await DeleteList.Run(request, id) as NoContentResult;
+            var result = await CreateTask.Run(task, listId) as NoContentResult;
 
             Assert.IsNotNull(result);
         }

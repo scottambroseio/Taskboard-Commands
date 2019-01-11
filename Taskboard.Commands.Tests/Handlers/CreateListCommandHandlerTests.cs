@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Optional;
@@ -8,6 +7,7 @@ using Taskboard.Commands.Domain;
 using Taskboard.Commands.Enums;
 using Taskboard.Commands.Handlers;
 using Taskboard.Commands.Repositories;
+using Task = System.Threading.Tasks.Task;
 
 namespace Taskboard.Commands.Tests.Handlers
 {

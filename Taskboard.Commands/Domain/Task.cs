@@ -1,9 +1,8 @@
-﻿using System.Collections.Generic;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 
 namespace Taskboard.Commands.Domain
 {
-    public class List
+    public class Task
     {
         [JsonProperty(PropertyName = "id")]
         public string Id { get; set; }
@@ -11,7 +10,7 @@ namespace Taskboard.Commands.Domain
         [JsonProperty("name")]
         public string Name { get; set; }
 
-        [JsonProperty("tasks")]
-        public ICollection<Task> Tasks { get; set; } = new List<Task>();
+        [JsonProperty("description")]
+        public string Description { get; set; }
     }
 }
