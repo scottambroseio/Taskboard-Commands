@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Net;
 using System.Threading.Tasks;
-using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
-using Optional;
 using Taskboard.Commands.Domain;
-using Taskboard.Commands.Enums;
+using Taskboard.Commands.Exceptions;
+using Task = System.Threading.Tasks.Task;
 
 namespace Taskboard.Commands.Repositories
 {
@@ -15,12 +14,10 @@ namespace Taskboard.Commands.Repositories
         private readonly string collection;
         private readonly string db;
         private readonly IDocumentClient documentClient;
-        private readonly TelemetryClient telemetryClient;
 
-        public ListRepository(TelemetryClient telemetryClient, IDocumentClient documentClient, string db,
+        public ListRepository(IDocumentClient documentClient, string db,
             string collection)
         {
-            this.telemetryClient = telemetryClient ?? throw new ArgumentNullException(nameof(telemetryClient));
             this.documentClient = documentClient ?? throw new ArgumentNullException(nameof(documentClient));
             this.db = !string.IsNullOrWhiteSpace(db) ? db : throw new ArgumentNullException(nameof(db));
             this.collection = !string.IsNullOrWhiteSpace(collection)
@@ -28,45 +25,7 @@ namespace Taskboard.Commands.Repositories
                 : throw new ArgumentNullException(nameof(collection));
         }
 
-        public async Task<Option<string, CosmosFailure>> Create(List list)
-        {
-            try
-            {
-                var uri = UriFactory.CreateDocumentCollectionUri(db, collection);
-                var result = await documentClient.CreateDocumentAsync(uri, list);
-
-                return Option.Some<string, CosmosFailure>(result.Resource.Id);
-            }
-            catch (DocumentClientException ex)
-            {
-                telemetryClient.TrackException(ex);
-
-                return Option.None<string, CosmosFailure>(CosmosFailure.Error);
-            }
-        }
-
-        public async Task<Option<CosmosFailure>> Delete(string id)
-        {
-            try
-            {
-                var uri = UriFactory.CreateDocumentUri(db, collection, id);
-
-                await documentClient.DeleteDocumentAsync(uri, new RequestOptions
-                {
-                    PartitionKey = new PartitionKey(id)
-                });
-
-                return Option.None<CosmosFailure>();
-            }
-            catch (DocumentClientException ex)
-            {
-                telemetryClient.TrackException(ex);
-
-                return Option.Some(CosmosFailure.Error);
-            }
-        }
-
-        public async Task<Option<List, CosmosFailure>> GetById(string id)
+        public async Task<List> GetById(string id)
         {
             try
             {
@@ -77,39 +36,75 @@ namespace Taskboard.Commands.Repositories
                     PartitionKey = new PartitionKey(id)
                 });
 
-                return Option.Some<List, CosmosFailure>(document);
+                return document.Document;
             }
             catch (DocumentClientException ex)
             {
                 if (ex.StatusCode == HttpStatusCode.NotFound)
                 {
-                    return Option.None<List, CosmosFailure>(CosmosFailure.NotFound);
+                    throw ResourceNotFoundException.FromResourceId(id);
                 }
 
-                telemetryClient.TrackException(ex);
-
-                return Option.None<List, CosmosFailure>(CosmosFailure.Error);
+                throw DataAccessException.FromInnerException(ex);
             }
         }
 
-        public async Task<Option<CosmosFailure>> Replace(List list)
+        public async Task<string> Create(List list)
+        {
+            try
+            {
+                var uri = UriFactory.CreateDocumentCollectionUri(db, collection);
+                var result = await documentClient.CreateDocumentAsync(uri, list);
+
+                return result.Resource.Id;
+            }
+            catch (DocumentClientException ex)
+            {
+                throw DataAccessException.FromInnerException(ex);
+            }
+        }
+
+        public Task Replace(List list)
         {
             try
             {
                 var uri = UriFactory.CreateDocumentUri(db, collection, list.Id);
 
-                await documentClient.ReplaceDocumentAsync(uri, list, new RequestOptions
+                return documentClient.ReplaceDocumentAsync(uri, list, new RequestOptions
                 {
                     PartitionKey = new PartitionKey(list.Id)
                 });
-
-                return Option.None<CosmosFailure>();
             }
             catch (DocumentClientException ex)
             {
-                telemetryClient.TrackException(ex);
+                if (ex.StatusCode == HttpStatusCode.NotFound)
+                {
+                    throw ResourceNotFoundException.FromResourceId(list.Id);
+                }
 
-                return Option.Some(CosmosFailure.Error);
+                throw DataAccessException.FromInnerException(ex);
+            }
+        }
+
+        public Task Delete(string id)
+        {
+            try
+            {
+                var uri = UriFactory.CreateDocumentUri(db, collection, id);
+
+                return documentClient.DeleteDocumentAsync(uri, new RequestOptions
+                {
+                    PartitionKey = new PartitionKey(id)
+                });
+            }
+            catch (DocumentClientException ex)
+            {
+                if (ex.StatusCode == HttpStatusCode.NotFound)
+                {
+                    throw ResourceNotFoundException.FromResourceId(id);
+                }
+
+                throw DataAccessException.FromInnerException(ex);
             }
         }
     }

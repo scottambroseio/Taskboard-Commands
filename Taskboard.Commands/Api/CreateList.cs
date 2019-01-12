@@ -23,15 +23,23 @@ namespace Taskboard.Commands.Api
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "lists")] ListDTO list)
         {
-            var command = new CreateListCommand {Name = list.Name};
-            var handler = Container.GetInstance<ICommandHander<CreateListCommand, Uri>>();
+            try
+            {
+                var command = new CreateListCommand {Name = list.Name};
+                var handler = Container.GetInstance<ICommandHander<CreateListCommand, string>>();
 
-            var result = await handler.Execute(command);
+                var id = await handler.Execute(command);
 
-            return result.Match<IActionResult>(
-                location => new CreatedResult(location, null),
-                error => new InternalServerErrorResult()
-            );
+                var uri = new Uri(string.Format(Environment.GetEnvironmentVariable("LIST_RESOURCE_URI"), id));
+
+                return new CreatedResult(uri, null);
+            }
+            catch (Exception ex)
+            {
+                Container.GetInstance<TelemetryClient>().TrackException(ex);
+
+                return new InternalServerErrorResult();
+            }
         }
 
         private static Container BuildContainer()
@@ -45,11 +53,10 @@ namespace Taskboard.Commands.Api
             container.RegisterSingleton<IDocumentClient>(() =>
                 new DocumentClient(new Uri(Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")),
                     Environment.GetEnvironmentVariable("COSMOS_KEY")));
-            container.Register<IListRepository>(() => new ListRepository(container.GetInstance<TelemetryClient>(),
-                container.GetInstance<IDocumentClient>(),
+            container.Register<IListRepository>(() => new ListRepository(container.GetInstance<IDocumentClient>(),
                 Environment.GetEnvironmentVariable("COSMOS_DB"),
                 Environment.GetEnvironmentVariable("COSMOS_COLLECTION")));
-            container.Register<ICommandHander<CreateListCommand, Uri>, CreateListCommandHandler>();
+            container.Register<ICommandHander<CreateListCommand, string>, CreateListCommandHandler>();
 
             return container;
         }

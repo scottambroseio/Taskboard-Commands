@@ -2,10 +2,9 @@
 using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using Optional;
 using Taskboard.Commands.Commands;
 using Taskboard.Commands.Domain;
-using Taskboard.Commands.Enums;
+using Taskboard.Commands.Exceptions;
 using Taskboard.Commands.Handlers;
 using Taskboard.Commands.Repositories;
 using Task = System.Threading.Tasks.Task;
@@ -16,65 +15,51 @@ namespace Taskboard.Commands.Tests.Handlers
     public class UpdateTaskCommandHandlerTests
     {
         [TestMethod]
-        public async Task Execute_ReturnsNotFoundWhenListDoesNotExist()
+        public async Task Execute_ReturnsCompletedTaskOnSuccess()
         {
             var repo = new Mock<IListRepository>();
-            var command = new UpdateTaskCommand
+            var listId = Guid.NewGuid().ToString();
+            var taskId = Guid.NewGuid().ToString();
+            var list = new List
             {
-                ListId = Guid.NewGuid().ToString(),
-                TaskId = Guid.NewGuid().ToString(),
-                Description = "description",
-                Name = "name"
+                Id = listId,
+                Tasks = new List<Domain.Task>
+                {
+                    new Domain.Task
+                    {
+                        Id = taskId
+                    }
+                }
             };
+            var command = new UpdateTaskCommand {ListId = listId, TaskId = taskId};
             var handler = new UpdateTaskCommandHandler(repo.Object);
 
-            repo.Setup(r => r.GetById(It.IsAny<string>()))
-                .ReturnsAsync(Option.None<List, CosmosFailure>(CosmosFailure.NotFound));
+            repo.Setup(r => r.GetById(It.IsAny<string>())).ReturnsAsync(list);
 
-            var result = await handler.Execute(command);
+            var result = handler.Execute(command);
 
-            result.Match(
-                failure => Assert.AreEqual(CommandFailure.NotFound, failure),
-                () => Assert.Fail()
-            );
+            await result;
+
+            Assert.AreEqual(true, result.IsCompleted);
         }
 
         [TestMethod]
-        public async Task Execute_ReturnsCorrectResultOnSuccessAndUpdatesTask()
+        public async Task Execute_ThrowsResourceNotFoundExceptionOnNoMatchingTask()
         {
             var repo = new Mock<IListRepository>();
-            var taskid = Guid.NewGuid().ToString();
-            var task = new Domain.Task
-            {
-                Id = taskid
-            };
+            var listId = Guid.NewGuid().ToString();
+            var taskId = Guid.NewGuid().ToString();
             var list = new List
             {
-                Tasks = new List<Domain.Task>
-                {
-                    task
-                }
+                Id = listId,
+                Tasks = new List<Domain.Task>()
             };
-            var command = new UpdateTaskCommand
-            {
-                ListId = Guid.NewGuid().ToString(),
-                TaskId = taskid,
-                Description = "description",
-                Name = "name"
-            };
+            var command = new UpdateTaskCommand {ListId = listId, TaskId = taskId};
             var handler = new UpdateTaskCommandHandler(repo.Object);
 
-            repo.Setup(r => r.GetById(It.IsAny<string>()))
-                .ReturnsAsync(Option.Some<List, CosmosFailure>(list));
+            repo.Setup(r => r.GetById(It.IsAny<string>())).ReturnsAsync(list);
 
-            var result = await handler.Execute(command);
-
-            result.MatchSome(failure => Assert.Fail());
-
-            repo.Verify(r => r.Replace(list));
-
-            Assert.AreEqual(task.Description, "description");
-            Assert.AreEqual(task.Name, "name");
+            await Assert.ThrowsExceptionAsync<ResourceNotFoundException>(() => handler.Execute(command));
         }
     }
 }

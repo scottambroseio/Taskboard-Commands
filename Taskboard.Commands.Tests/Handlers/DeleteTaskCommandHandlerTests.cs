@@ -2,10 +2,9 @@
 using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using Optional;
 using Taskboard.Commands.Commands;
 using Taskboard.Commands.Domain;
-using Taskboard.Commands.Enums;
+using Taskboard.Commands.Exceptions;
 using Taskboard.Commands.Handlers;
 using Taskboard.Commands.Repositories;
 using Task = System.Threading.Tasks.Task;
@@ -16,59 +15,51 @@ namespace Taskboard.Commands.Tests.Handlers
     public class DeleteTaskCommandHandlerTests
     {
         [TestMethod]
-        public async Task Execute_ReturnsNotFoundWhenListDoesNotExist()
+        public async Task Execute_ReturnsCompletedTaskOnSuccess()
         {
             var repo = new Mock<IListRepository>();
-            var command = new DeleteTaskCommand
-            {
-                ListId = Guid.NewGuid().ToString(),
-                TaskId = Guid.NewGuid().ToString()
-            };
-            var handler = new DeleteTaskCommandHandler(repo.Object);
-
-            repo.Setup(r => r.GetById(It.IsAny<string>()))
-                .ReturnsAsync(Option.None<List, CosmosFailure>(CosmosFailure.NotFound));
-
-            var result = await handler.Execute(command);
-
-            result.Match(
-                failure => Assert.AreEqual(CommandFailure.NotFound, failure),
-                () => Assert.Fail()
-            );
-        }
-
-        [TestMethod]
-        public async Task Execute_ReturnsCorrectResultOnSuccessAndDeletesTask()
-        {
-            var repo = new Mock<IListRepository>();
-            var taskid = Guid.NewGuid().ToString();
+            var listId = Guid.NewGuid().ToString();
+            var taskId = Guid.NewGuid().ToString();
             var list = new List
             {
+                Id = listId,
                 Tasks = new List<Domain.Task>
                 {
                     new Domain.Task
                     {
-                        Id = taskid
+                        Id = taskId
                     }
                 }
             };
-            var command = new DeleteTaskCommand
-            {
-                ListId = Guid.NewGuid().ToString(),
-                TaskId = taskid
-            };
+            var command = new DeleteTaskCommand {ListId = listId, TaskId = taskId};
             var handler = new DeleteTaskCommandHandler(repo.Object);
 
-            repo.Setup(r => r.GetById(It.IsAny<string>()))
-                .ReturnsAsync(Option.Some<List, CosmosFailure>(list));
+            repo.Setup(r => r.GetById(It.IsAny<string>())).ReturnsAsync(list);
 
-            var result = await handler.Execute(command);
+            var result = handler.Execute(command);
 
-            result.MatchSome(failure => Assert.Fail());
+            await result;
 
-            repo.Verify(r => r.Replace(list));
+            Assert.AreEqual(true, result.IsCompleted);
+        }
 
-            Assert.AreEqual(0, list.Tasks.Count);
+        [TestMethod]
+        public async Task Execute_ThrowsResourceNotFoundExceptionOnNoMatchingTask()
+        {
+            var repo = new Mock<IListRepository>();
+            var listId = Guid.NewGuid().ToString();
+            var taskId = Guid.NewGuid().ToString();
+            var list = new List
+            {
+                Id = listId,
+                Tasks = new List<Domain.Task>()
+            };
+            var command = new DeleteTaskCommand {ListId = listId, TaskId = taskId};
+            var handler = new DeleteTaskCommandHandler(repo.Object);
+
+            repo.Setup(r => r.GetById(It.IsAny<string>())).ReturnsAsync(list);
+
+            await Assert.ThrowsExceptionAsync<ResourceNotFoundException>(() => handler.Execute(command));
         }
     }
 }

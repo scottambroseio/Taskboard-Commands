@@ -10,6 +10,7 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using SimpleInjector;
 using Taskboard.Commands.Commands;
+using Taskboard.Commands.Exceptions;
 using Taskboard.Commands.Handlers;
 using Taskboard.Commands.Repositories;
 
@@ -24,15 +25,27 @@ namespace Taskboard.Commands.Api
             [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "list/{listid}/task/{taskid}")]
             HttpRequest req, string listid, string taskid)
         {
-            var command = new DeleteTaskCommand {ListId = listid, TaskId = taskid};
-            var handler = Container.GetInstance<ICommandHander<DeleteTaskCommand>>();
+            try
+            {
+                var command = new DeleteTaskCommand {ListId = listid, TaskId = taskid};
+                var handler = Container.GetInstance<ICommandHander<DeleteTaskCommand>>();
 
-            var result = await handler.Execute(command);
+                await handler.Execute(command);
 
-            return result.Match<IActionResult>(
-                error => new InternalServerErrorResult(),
-                () => new NoContentResult()
-            );
+                return new NoContentResult();
+            }
+            catch (ResourceNotFoundException ex)
+            {
+                Container.GetInstance<TelemetryClient>().TrackException(ex);
+
+                return new NotFoundResult();
+            }
+            catch (Exception ex)
+            {
+                Container.GetInstance<TelemetryClient>().TrackException(ex);
+
+                return new InternalServerErrorResult();
+            }
         }
 
         private static Container BuildContainer()
@@ -46,8 +59,7 @@ namespace Taskboard.Commands.Api
             container.RegisterSingleton<IDocumentClient>(() =>
                 new DocumentClient(new Uri(Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")),
                     Environment.GetEnvironmentVariable("COSMOS_KEY")));
-            container.Register<IListRepository>(() => new ListRepository(container.GetInstance<TelemetryClient>(),
-                container.GetInstance<IDocumentClient>(),
+            container.Register<IListRepository>(() => new ListRepository(container.GetInstance<IDocumentClient>(),
                 Environment.GetEnvironmentVariable("COSMOS_DB"),
                 Environment.GetEnvironmentVariable("COSMOS_COLLECTION")));
             container.Register<ICommandHander<DeleteTaskCommand>, DeleteTaskCommandHandler>();

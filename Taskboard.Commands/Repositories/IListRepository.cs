@@ -1,15 +1,14 @@
 ﻿using System.Threading.Tasks;
-using Optional;
 using Taskboard.Commands.Domain;
-using Taskboard.Commands.Enums;
+using Task = System.Threading.Tasks.Task;
 
 namespace Taskboard.Commands.Repositories
 {
     public interface IListRepository
     {
-        Task<Option<List, CosmosFailure>> GetById(string id);
-        Task<Option<string, CosmosFailure>> Create(List list);
-        Task<Option<CosmosFailure>> Replace(List list);
-        Task<Option<CosmosFailure>> Delete(string id);
+        Task<List> GetById(string id);
+        Task<string> Create(List list);
+        Task Replace(List list);
+        Task Delete(string id);
     }
 }

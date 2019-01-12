@@ -1,10 +1,8 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using Optional;
 using Taskboard.Commands.Commands;
 using Taskboard.Commands.Domain;
-using Taskboard.Commands.Enums;
 using Taskboard.Commands.Handlers;
 using Taskboard.Commands.Repositories;
 using Task = System.Threading.Tasks.Task;
@@ -15,51 +13,19 @@ namespace Taskboard.Commands.Tests.Handlers
     public class CreateTaskCommandHandlerTests
     {
         [TestMethod]
-        public async Task Execute_ReturnsNotFoundWhenListDoesNotExist()
+        public async Task Execute_ReturnsIdOnSuccess()
         {
             var repo = new Mock<IListRepository>();
-            var command = new CreateTaskCommand
-            {
-                ListId = Guid.NewGuid().ToString(),
-                Description = "description",
-                Name = "name"
-            };
+            var listId = Guid.NewGuid().ToString();
+            var command = new CreateTaskCommand {ListId = listId};
             var handler = new CreateTaskCommandHandler(repo.Object);
 
-            repo.Setup(r => r.GetById(It.IsAny<string>()))
-                .ReturnsAsync(Option.None<List, CosmosFailure>(CosmosFailure.NotFound));
+            repo.Setup(r => r.GetById(It.IsAny<string>())).ReturnsAsync(new List());
 
-            var result = await handler.Execute(command);
+            var taskId = await handler.Execute(command);
 
-            result.Match(
-                failure => Assert.AreEqual(CommandFailure.NotFound, failure),
-                () => Assert.Fail()
-            );
-        }
-
-        [TestMethod]
-        public async Task Execute_ReturnsCorrectResultOnSuccessAndCreatesTask()
-        {
-            var repo = new Mock<IListRepository>();
-            var list = new List();
-            var command = new CreateTaskCommand
-            {
-                ListId = Guid.NewGuid().ToString(),
-                Description = "description",
-                Name = "name"
-            };
-            var handler = new CreateTaskCommandHandler(repo.Object);
-
-            repo.Setup(r => r.GetById(It.IsAny<string>()))
-                .ReturnsAsync(Option.Some<List, CosmosFailure>(list));
-
-            var result = await handler.Execute(command);
-
-            result.MatchSome(failure => Assert.Fail());
-
-            repo.Verify(r => r.Replace(list));
-
-            Assert.AreEqual(1, list.Tasks.Count);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(taskId));
+            Assert.IsTrue(Guid.TryParse(taskId, out var _));
         }
     }
 }

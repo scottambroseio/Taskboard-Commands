@@ -10,6 +10,7 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using SimpleInjector;
 using Taskboard.Commands.Commands;
 using Taskboard.Commands.DTO;
+using Taskboard.Commands.Exceptions;
 using Taskboard.Commands.Handlers;
 using Taskboard.Commands.Repositories;
 
@@ -21,17 +22,32 @@ namespace Taskboard.Commands.Api
 
         [FunctionName(nameof(CreateTask))]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "list/{listid}/tasks")] TaskDTO task, string listid)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "list/{listid}/tasks")] TaskDTO task,
+            string listid)
         {
-            var command = new CreateTaskCommand {ListId = listid, Name = task.Name, Description = task.Description};
-            var handler = Container.GetInstance<ICommandHander<CreateTaskCommand>>();
+            try
+            {
+                var command = new CreateTaskCommand {ListId = listid, Name = task.Name, Description = task.Description};
+                var handler = Container.GetInstance<ICommandHander<CreateTaskCommand, string>>();
 
-            var result = await handler.Execute(command);
+                var id = await handler.Execute(command);
 
-            return result.Match<IActionResult>(
-                error => new InternalServerErrorResult(),
-                () => new NoContentResult()
-            );
+                var uri = new Uri(string.Format(Environment.GetEnvironmentVariable("TASK_RESOURCE_URI"), listid, id));
+
+                return new CreatedResult(uri, null);
+            }
+            catch (ResourceNotFoundException ex)
+            {
+                Container.GetInstance<TelemetryClient>().TrackException(ex);
+
+                return new NotFoundResult();
+            }
+            catch (Exception ex)
+            {
+                Container.GetInstance<TelemetryClient>().TrackException(ex);
+
+                return new InternalServerErrorResult();
+            }
         }
 
         private static Container BuildContainer()
@@ -45,11 +61,10 @@ namespace Taskboard.Commands.Api
             container.RegisterSingleton<IDocumentClient>(() =>
                 new DocumentClient(new Uri(Environment.GetEnvironmentVariable("COSMOS_ENDPOINT")),
                     Environment.GetEnvironmentVariable("COSMOS_KEY")));
-            container.Register<IListRepository>(() => new ListRepository(container.GetInstance<TelemetryClient>(),
-                container.GetInstance<IDocumentClient>(),
+            container.Register<IListRepository>(() => new ListRepository(container.GetInstance<IDocumentClient>(),
                 Environment.GetEnvironmentVariable("COSMOS_DB"),
                 Environment.GetEnvironmentVariable("COSMOS_COLLECTION")));
-            container.Register<ICommandHander<CreateTaskCommand>, CreateTaskCommandHandler>();
+            container.Register<ICommandHander<CreateTaskCommand, string>, CreateTaskCommandHandler>();
 
             return container;
         }
